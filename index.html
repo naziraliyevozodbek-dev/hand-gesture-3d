@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hand Gesture 3D - Real-time Computer Vision & 3D Web App</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Three.js (3D WebGL Library) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Google MediaPipe Hands & Camera Utils -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+</head>
+<body>
+
+  <!-- Loading & Calibration Screen -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Tizim ishga tushirilmoqda</div>
+    <div class="loading-subtext" id="loading-subtext">MediaPipe Hands va Three.js yuklanmoqda, veb-kameraga ruxsat bering...</div>
+  </div>
+
+  <!-- Main App Viewport -->
+  <div id="app-container">
+    <!-- Hidden raw video element -->
+    <video id="webcam-video" playsinline autoplay muted></video>
+
+    <!-- Three.js 3D WebGL Canvas Layer -->
+    <canvas id="three-canvas"></canvas>
+
+    <!-- 2D Canvas for Hand Skeleton / Landmarks / Laser Effects -->
+    <canvas id="camera-overlay-canvas"></canvas>
+
+    <!-- Picture-in-Picture Webcam Preview -->
+    <div class="pip-container">
+      <div class="pip-header">
+        <span>LIVE SENSOR FEED</span>
+        <span class="status-indicator" id="status-indicator"></span>
+      </div>
+      <canvas id="pip-canvas" class="pip-canvas"></canvas>
+    </div>
+
+    <!-- Futuristic HUD UI Layer -->
+    <div class="hud-layer">
+      <!-- Top Navigation / Title -->
+      <header class="hud-header">
+        <div class="brand-badge">
+          <div class="brand-icon">3D</div>
+          <div class="brand-text">
+            <h1>Gesture Spatial HUD</h1>
+            <p>Computer Vision & 3D Geometry</p>
+          </div>
+        </div>
+
+        <div class="header-actions">
+          <button class="hud-btn active" id="btn-autorotate" title="Avtomatik aylanish">🔄 Aylanish</button>
+          <button class="hud-btn" id="btn-wireframe" title="Simli karkas rejimi">🕸️ Wireframe</button>
+          <button class="hud-btn active" id="btn-sound" title="Ovoz effektlari">🔊 Ovoz</button>
+          <button class="hud-btn" id="btn-help" title="Qo'llanma">ℹ️ Yordam</button>
+          <button class="hud-btn" id="btn-fullscreen" title="To'liq ekran">⛶ Ekran</button>
+        </div>
+      </header>
+
+      <!-- Left Telemetry & Status HUD Panel -->
+      <aside class="hud-left">
+        <div class="hud-card">
+          <div class="hud-card-title">
+            <span>Aniqlangan Jest</span>
+            <span id="camera-status-text">Yuklanmoqda</span>
+          </div>
+
+          <div class="finger-counter-display">
+            <div class="big-number" id="finger-count-number">1</div>
+            <div class="shape-badge">
+              <div class="shape-badge-name" id="shape-name-badge">Kub (Cube)</div>
+              <div class="shape-badge-status" id="shape-desc-badge">1 barmoq ko'tarildi</div>
+            </div>
+          </div>
+
+          <!-- Active Fingers Pills -->
+          <div class="fingers-pills" title="Bosh, ko'rsatkich, o'rta, nomsiz, jimjiloq barmoqlar holati">
+            <div class="finger-pill" id="pill-thumb" title="Bosh barmoq"></div>
+            <div class="finger-pill active" id="pill-index" title="Ko'rsatkich barmoq"></div>
+            <div class="finger-pill" id="pill-middle" title="O'rta barmoq"></div>
+            <div class="finger-pill" id="pill-ring" title="Nomsiz barmoq"></div>
+            <div class="finger-pill" id="pill-pinky" title="Kichik barmoq"></div>
+          </div>
+        </div>
+
+        <!-- Telemetry Data -->
+        <div class="hud-card">
+          <div class="hud-card-title">
+            <span>Telemetriya</span>
+            <span style="color: var(--primary-cyan)">FPS: <b id="fps-value">60</b></span>
+          </div>
+
+          <div class="telemetry-row">
+            <span class="telemetry-label">Kuzatuv holati:</span>
+            <span class="telemetry-value" id="hand-detect-status">Kutilmoqda...</span>
+          </div>
+          <div class="telemetry-row">
+            <span class="telemetry-label">Faol Harakat:</span>
+            <span class="telemetry-value" id="gesture-name">Kub</span>
+          </div>
+          <div class="telemetry-row">
+            <span class="telemetry-label">Masshtab (Scale):</span>
+            <span class="telemetry-value" id="scale-value">1.00x</span>
+          </div>
+          <div class="telemetry-row">
+            <span class="telemetry-label">Burilish burchagi:</span>
+            <span class="telemetry-value" id="rot-value">0°</span>
+          </div>
+
+          <div style="margin-top: 10px;">
+            <div class="telemetry-row" style="padding-bottom: 2px;">
+              <span class="telemetry-label">Pinch Masofasi:</span>
+            </div>
+            <div class="pinch-meter">
+              <div class="pinch-fill" id="pinch-fill"></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Right Guides and Colors Panel -->
+      <aside class="hud-right">
+        <!-- Quick Gestures Guide -->
+        <div class="hud-card">
+          <div class="hud-card-title">
+            <span>Figuralar & Barmoqlar</span>
+          </div>
+          <div class="guide-list">
+            <div class="guide-item" id="guide-shape-0">
+              <div class="guide-key">0</div>
+              <div class="guide-desc">
+                <span class="guide-shape">Musht (Fist)</span>
+                <span class="guide-gesture">Qulflash / To'xtatish</span>
+              </div>
+            </div>
+            <div class="guide-item highlighted" id="guide-shape-1">
+              <div class="guide-key">1</div>
+              <div class="guide-desc">
+                <span class="guide-shape">Kub</span>
+                <span class="guide-gesture">Ko'rsatkich barmoq</span>
+              </div>
+            </div>
+            <div class="guide-item" id="guide-shape-2">
+              <div class="guide-key">2</div>
+              <div class="guide-desc">
+                <span class="guide-shape">Piramida</span>
+                <span class="guide-gesture">Victory / Tinqlik</span>
+              </div>
+            </div>
+            <div class="guide-item" id="guide-shape-3">
+              <div class="guide-key">3</div>
+              <div class="guide-desc">
+                <span class="guide-shape">Silindr</span>
+                <span class="guide-gesture">Uchta barmoq</span>
+              </div>
+            </div>
+            <div class="guide-item" id="guide-shape-4">
+              <div class="guide-key">4</div>
+              <div class="guide-desc">
+                <span class="guide-shape">Sfera</span>
+                <span class="guide-gesture">To'rtta barmoq</span>
+              </div>
+            </div>
+            <div class="guide-item" id="guide-shape-5">
+              <div class="guide-key">5</div>
+              <div class="guide-desc">
+                <span class="guide-shape">Torus (Halqa)</span>
+                <span class="guide-gesture">Ochiq kaft</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Color Palette -->
+        <div class="hud-card">
+          <div class="hud-card-title">
+            <span>Neon Rangi</span>
+          </div>
+          <div class="color-options">
+            <div class="color-dot active" data-color="00f0ff" style="background-color: #00f0ff;" title="Cyan Neon"></div>
+            <div class="color-dot" data-color="ff007f" style="background-color: #ff007f;" title="Magenta Pink"></div>
+            <div class="color-dot" data-color="00ffa3" style="background-color: #00ffa3;" title="Emerald Green"></div>
+            <div class="color-dot" data-color="ffb700" style="background-color: #ffb700;" title="Solar Gold"></div>
+            <div class="color-dot" data-color="9d00ff" style="background-color: #9d00ff;" title="Cyber Purple"></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Bottom Control Bar -->
+      <footer class="hud-bottom-bar">
+        <button class="bottom-btn" id="btn-camera-mode">📷 Fon: PiP</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Help / Instructions Modal -->
+  <div class="modal-overlay" id="guide-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Foydalanish Yo'riqnomasi</h3>
+        <button class="modal-close" id="modal-close">&times;</button>
+      </div>
+
+      <div class="instruction-grid">
+        <div class="instruction-card">
+          <h4>👆 1-5 Barmoqlar (Figuralar)</h4>
+          <p>Kamera oldida barmoqlaringiz sonini o'zgartiring (1: Kub, 2: Piramida, 3: Silindr, 4: Sfera, 5: Torus). Figura darhol o'zgaradi.</p>
+        </div>
+
+        <div class="instruction-card">
+          <h4>✊ 0 Barmoq (Musht)</h4>
+          <p>Musht tugsangiz (0 ta barmoq), figura harakati qulflanadi (Freeze) va kristal holatida to'xtaydi.</p>
+        </div>
+
+        <div class="instruction-card">
+          <h4>🤏 Pinch / Masshtablash</h4>
+          <p>Bosh barmoq va ko'rsatkich barmog'ingiz orasidagi masofani ochib-yopsangiz, 3D figura kattalashadi yoki kichrayadi.</p>
+        </div>
+
+        <div class="instruction-card">
+          <h4>🖐️ Qo'l Ergashishi (Tracking)</h4>
+          <p>Qo'lingizni ekranda harakatlantiring - 3D figura silliq tarzda qo'lingiz kaftiga ergashadi va kaft burchagiga mos aylanadi.</p>
+        </div>
+
+        <div class="instruction-card">
+          <h4>👐 Ikki Qo'l bilan Boshqaruv</h4>
+          <p>Ikkala qo'lingizni kameraga ko'rsatsangiz, ularning orasi ochilganda figura kattalashadi, yaqinlashganda kichrayadi.</p>
+        </div>
+
+        <div class="instruction-card">
+          <h4>⌨️ Klaviatura Qisqa Tugmalari</h4>
+          <p>0 dan 5 gacha raqamli tugmalarni bosib ham figuralarni to'g'ridan-to'g'ri o'zgartirishingiz mumkin.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript App -->
+  <script src="app.js"></script>
+</body>
+</html>
